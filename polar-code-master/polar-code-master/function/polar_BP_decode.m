@@ -1,0 +1,59 @@
+function [u_llr,c_llr] = polar_BP_decode(initialLLRs,BP_ITER_NUM)
+%该Matlab函数实现了极化码的BP译码算法，其中：
+% 输入参数initialLLRs是极化码的初始对数似然比（LLR）。
+% 输入参数BP_ITER_NUM指定了BP译码算法的迭代次数。（数值结果越好但同时运行速度更慢）
+% 输出参数u_llr是解码的信息比特对应的LLR。
+% 输出参数c_llr是解码的校验比特对应的LLR。
+
+% 该函数的主要部分是两个嵌套的for循环，其中第一个循环对变量lambda进行迭代，
+% 而第二个循环对变量phi进行迭代。这两个循环结合起来，实现了BP译码算法中的消息传递过程。
+% 具体来说，对于每个lambda和phi，该算法计算了左向传递和右向传递的更新信息，并将结果存储在两个矩阵L和R中。
+% 然后，该算法更新lambda和phi的值，并重复进行BP消息传递，直到达到指定的迭代次数。
+
+% 在每个迭代的结束时，该算法计算信息比特和校验比特的LLR，并将其作为输出返回。
+% 需要注意的是，该函数中使用了一个名为fFunction的子函数来计算更新信息。
+% 这个子函数的实现通常是通过查表实现的，根据算法的选择，可以使用不同的查表策略。
+
+    global PCparams;
+    n = PCparams.n;
+    N = PCparams.N;
+   
+    L = zeros(N,n+1);
+    R = zeros(N,n+1);
+    inf_num = 1000;
+    L(:,n+1) = initialLLRs';
+    R(PCparams.FZlookup==0,1) = inf_num;
+    
+    for iter = 1:BP_ITER_NUM
+        
+        for lambda = 1:n
+            for phi = 0:2^lambda-1
+                psi = floor(phi/2);
+				for omega = 0:2^(n-lambda)-1
+					if mod(phi,2)==0	
+						L(phi+omega*2^lambda+1,n+1-lambda)= fFunction(L(psi+2*omega*2^(lambda-1)+1,n+2-lambda),L(psi+(2*omega+1)*2^(lambda-1)+1,n+2-lambda)+R(phi+1+omega*2^lambda+1,n+1-lambda));
+					else
+						L(phi+omega*2^lambda+1,n+1-lambda)= L(psi+(2*omega+1)*2^(lambda-1)+1,n+2-lambda)+fFunction(L(psi+2*omega*2^(lambda-1)+1,n+2-lambda),R(phi-1+omega*2^lambda+1,n+1-lambda));
+					end
+				end
+            end
+        end
+        
+        for lambda = n:-1:1
+            for phi = 0:2^lambda-1
+				psi = floor(phi/2);
+                if mod(phi,2)~=0	
+                    for omega = 0:2^(n-lambda)-1
+						R(psi+2*omega*2^(lambda-1)+1,n+2-lambda)= fFunction(L(psi+(2*omega+1)*2^(lambda-1)+1,n+2-lambda)+R(phi+omega*2^lambda+1,n+1-lambda), R(phi-1+omega*2^lambda+1,n+1-lambda));
+						R(psi+(2*omega+1)*2^(lambda-1)+1,n+2-lambda)= R(phi+omega*2^lambda+1,n+1-lambda)+fFunction(L(psi+(2*omega)*2^(lambda-1)+1,n+2-lambda),R(phi-1+omega*2^lambda+1,n+1-lambda));
+					end
+			    end
+            end
+        end
+        
+    end
+    
+    %璁＄畻鏈?粓杈撳嚭llr
+    u_llr = L(:,1)+R(:,1);
+    c_llr = R(:,n+1);
+end
